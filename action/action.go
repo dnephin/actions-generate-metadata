@@ -29,7 +29,7 @@ type Metadata struct {
 	Branch          string `json:"branch"`
 	BuildWorkflowId string `json:"buildWorkflowId"`
 	Product         string `json:"product"`
-	Repository      string `json:"repository""`
+	Repository      string `json:"repository"`
 	RepositoryOwner string `json:"repositoryOwner"`
 	Revision        string `json:"sha"`
 	Version         string `json:"version"`
