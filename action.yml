@@ -13,10 +13,10 @@ inputs:
     default: "metadata.json"
   product:
     description: 'The product binary name'
-    required: false
+    required: true
   repository:
     description: 'The repository name for collecting the metadata'
-    required: true
+    required: false
   repositoryOwner:
     description: 'The repository owner (organization or user). Default is set to "hashicorp" organization'
     required: false

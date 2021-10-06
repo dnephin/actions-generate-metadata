@@ -1,11 +1,7 @@
 name: Test generate-metadata-action
 
 on:
-  push:
-    branches:
-      - "*"
-    paths-ignore:
-      - 'README.md'
+  push
 
 jobs:
   action-run:
@@ -15,13 +11,12 @@ jobs:
     steps:
       - name: 'Checkout directory'
         uses: actions/checkout@v2
-      - uses: ./
       - name: Generate metadata file
         id: generate_metadata
-        uses: hashicorp/actions-generate-metadata@main
+        uses: ./
         with:
-          repository: ${{ github.event.repository.name }}
-          version: make version
+          product: test-product-name
+          version: 0.0.0
 
       - uses: actions/upload-artifact@v2
         with:
