@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	actions "github.com/sethvargo/go-githubactions"
 	"io/ioutil"
 	"os"
@@ -36,6 +37,12 @@ type Metadata struct {
 }
 
 func main() {
+	if err := run(); err != nil {
+		actions.Fatalf(err.Error())
+	}
+}
+
+func run() error {
 	in := input{
 		branch:           actions.GetInput("branch"),
 		filePath:         actions.GetInput("filePath"),
@@ -46,31 +53,38 @@ func main() {
 		sha:              actions.GetInput("sha"),
 		version:          actions.GetInput("version"),
 	}
-	generatedFile := createMetadataJson(in)
-
-	if checkFileIsExist(generatedFile) {
-		actions.SetOutput("filepath", generatedFile)
-		actions.SetEnv("filepath", generatedFile)
-		actions.Infof("Successfully created %v file\n", generatedFile)
-	} else {
-		actions.Fatalf("File %v does not exist", generatedFile)
+	generatedFile, err := createMetadataJson(in)
+	if err != nil {
+		return err
 	}
+
+	if err := checkFileIsExist(generatedFile); err != nil {
+		return err
+	}
+
+	actions.SetOutput("filepath", generatedFile)
+	actions.SetEnv("filepath", generatedFile)
+	actions.Infof("Successfully created %v file\n", generatedFile)
+	return nil
 }
 
-func checkFileIsExist(filepath string) bool {
+func checkFileIsExist(filepath string) error {
 	fileInfo, err := os.Stat(filepath)
 
 	if os.IsNotExist(err) {
-		return false
+		return err
 	}
 	if err != nil {
-		actions.Fatalf("failed to read file: %v", filepath)
+		return fmt.Errorf("failed to read file %v: %w", filepath, err)
 	}
 	// Return false if the fileInfo says the file path is a directory
-	return !fileInfo.IsDir()
+	if !fileInfo.IsDir() {
+		return fmt.Errorf("path is not a directory: %v", filepath)
+	}
+	return nil
 }
 
-func createMetadataJson(in input) string {
+func createMetadataJson(in input) (string, error) {
 	branch := in.branch
 	actions.Infof("GITHUB_HEAD_REF %v\n", os.Getenv("GITHUB_HEAD_REF"))
 	actions.Infof("GITHUB_REF %v\n", os.Getenv("GITHUB_REF"))
@@ -90,7 +104,7 @@ func createMetadataJson(in input) string {
 
 	product := in.product
 	if product == "" {
-		actions.Fatalf("Missing input 'product' value")
+		return "", fmt.Errorf("Missing input 'product' value")
 	}
 	sha := in.sha
 	if sha == "" {
@@ -109,14 +123,18 @@ func createMetadataJson(in input) string {
 
 	runId := os.Getenv("GITHUB_RUN_ID")
 	if runId == "" {
-		actions.Fatalf("GITHUB_RUN_ID is empty")
+		return "", fmt.Errorf("GITHUB_RUN_ID is empty")
 	}
 
 	version := in.version
 	if version == "" {
-		actions.Fatalf("The version or version command is not provided")
+		return "", fmt.Errorf("The version or version command is not provided")
 	} else if strings.Contains(version, " ") {
-		version = getVersion(version)
+		var err error
+		version, err = getVersion(version)
+		if err != nil {
+			return "", fmt.Errorf(err.Error())
+		}
 	}
 	actions.Infof("Working version %v\n", version)
 
@@ -133,25 +151,28 @@ func createMetadataJson(in input) string {
 	output, err := json.MarshalIndent(m, "", "\t\t")
 
 	if err != nil {
-		actions.Fatalf("JSON marshal failure. Error:%v\n", output, err)
+		return "", fmt.Errorf("JSON marshal failure. Error:%v\n", output, err)
 	} else {
 		err = ioutil.WriteFile(filePath, output, 0644)
 		if err != nil {
-			actions.Fatalf("Failed writing data into %v file. Error: %v\n", in.metadataFileName, err)
+			return "", fmt.Errorf("Failed writing data into %v file. Error: %v\n", in.metadataFileName, err)
 		}
 	}
-	return filePath
+	return filePath, nil
 }
 
-func getVersion(command string) string {
-	version := execCommand(strings.Fields(command)...)
-	if version == "" {
-		actions.Fatalf("Failed to setup version using %v command", command)
+func getVersion(command string) (string, error) {
+	version, err := execCommand(strings.Fields(command)...)
+	if err != nil {
+		return "", err
 	}
-	return strings.TrimSuffix(version, "\n")
+	if version == "" {
+		return "", fmt.Errorf("Failed to setup version using %v command", command)
+	}
+	return strings.TrimSuffix(version, "\n"), nil
 }
 
-func execCommand(args ...string) string {
+func execCommand(args ...string) (string, error) {
 	name := args[0]
 	stderr := new(bytes.Buffer)
 	stdout := new(bytes.Buffer)
@@ -164,7 +185,7 @@ func execCommand(args ...string) string {
 		strings.TrimSpace(string(stdout.Bytes())), strings.TrimSpace(string(stderr.Bytes())))
 
 	if err != nil {
-		actions.Fatalf("Failed to run %v command %v: %v", name, cmd, err)
+		return "", fmt.Errorf("Failed to run %v command %v: %v", name, cmd, err)
 	}
-	return string(stdout.Bytes())
+	return string(stdout.Bytes()), nil
 }
